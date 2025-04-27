@@ -1,5 +1,4 @@
 # Incident Response Simulation (T1059 - Command and Scripting Interpreter & T1086 - PowerShell)
-- [Scenario Creation](https://github.com/SPANKYWOWWOW/threat-hunting-scenario-tor/blob/main/threat-hunting-scenario-tor-event-creation.md)
 
 ## Tools and Frameworks used in this lab
 - Azure Virtual Machines
@@ -210,7 +209,7 @@ As you can see,`one of our detection rules were triggered!` Ideally, the others 
 `So now that we officially have a security “Incident”`, lets begin our Incident Response invstigation according to NIST 800-61.
 
 ---
-### 5. Conduct Incident Response Investigation 
+### 5.  Detection and Analysis Phase
 We will be conducting our incident response investigation in accordance with NIST 800-61 guidelines, which puts us in the Detection and Analysis Phase (([Click Here](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-61r2.pdf)) for NIST 800-61 Guidelines PDF):
 ![image](https://github.com/user-attachments/assets/37b76289-d354-4732-830e-6a444534c52a)
 
@@ -239,71 +238,157 @@ As a reminder, our simulated attack generated one MDE alert that indicated a pot
 ![image](https://github.com/user-attachments/assets/4c75e318-16c5-4e27-aa12-5d0cbc687877)
 
 ---
-## Chronological Event Timeline 
+### 5.1. Indicators of Compromise 
+**Microsoft Defender for Endpoint Logs (MDE)**
+To evaluate the logs recorded from MDE we will do the following:
+- Look at the logs generated for the alert in MDE
+- Analyze the PCAP file we created in our VM with Wireshark to identify suspicious network traffic from our VM.
+- Create and Download an investigation package from MDE for our VM (Click here if you don’t know how)
+- (Optional) use DeepBlueCLI to analyze windows event security logs from our VM.
 
-### 1. File Download - TOR Installer
+Let’s Start with looking at the timeline of logs generated in MDE for that specific alert by going into the “Alerts” tab and clicking on the alert itself: 
 
-- **Timestamp:** `April 8, 2025 – 21:56:01 UTC`
-🔹 User `labuser007` downloads the file:
- `tor-browser-windows-x86_64-portable-14.0.9.exe`
- 📂 Location: `C:\Users\labuser007\Downloads\tor-browser-windows-x86_64-portable-14.0.9.exe`
+![image](https://github.com/user-attachments/assets/c20ea9ed-0e83-45de-8e75-07ca61eedbfa)
 
-### 2. Process Execution - TOR Browser Installation
+Then we are going to down into the “Timeline” section and expand all of the process logs:
 
-- **Timestamp:** `April 8, 2025 – 21:59:21 UTC`
-🔹 User executes the Tor Browser installer.
- 🛠️ Process Created: `tor-browser-windows-x86_64-portable-14.0.9.exe`
- 🗂️ From: Downloads folder
- 🔍 Command Line: `tor-browser-windows-x86_64-portable-14.0.9.exe /S`
+![image](https://github.com/user-attachments/assets/238c0b16-b679-407b-96d1-46633cbbc411)
 
-### 3. Process Execution - TOR Browser Launch
+Once we do this, `we can see the entire timeline of events` that were recorded by MDE when this alert was triggered! 
 
-- **Timestamp:** `April 8, 2025 – 21:59:35 - 21:59:36 UTC`
-🔹 Multiple Tor-related files are created on the desktop, including:
-`Tor.txt`
-`Tor-Launcher.txt`
-`tor.exe`
- 📂 Path: `C:\Users\labuser007\Desktop\Tor Browser\Browser\TorBrowser\Tor\`
+As you go through the expanded logs, you will see some familiar commands that we initiated when setting up our attack. You will also see `all the malware scripts` that were run as a result!:
 
-### 4. Network Connection - TOR Network
+![image](https://github.com/user-attachments/assets/0d87e601-28ac-4e88-b0f2-a337fc8fa442)
 
-- **Timestamp:** `April 8, 2025 – 21:59:49 UTC`
-🔹 Tor Browser is launched.
- Process: `tor.exe` and `firefox.exe` both start executing.
- This confirms that the browser was successfully opened.
+Clearly there is alot indicators of compromise here! At this point, we would have enough evidence to contain and `isolate this endpoint`. Lets dig deeper and see if we can detect the steps involved in our AutoIt Script Execution attack.
 
-### 5. Additional Network Connections - TOR Browser Activity
 
-- **Timestamps:** `April 8, 2025 – 21:59:59 UTC`
-  🔹 Outbound network connection is established via Tor.
-🌐 Remote IP: `157.90.112.145`
+---
+### 5.2. MDE Logs
+Upon analyzing the MDE timeline of events, a few things stand out that tells us more about what this attack is trying to accomplish:
 
-🔌 Port: `9001` (a known Tor relay port)
+If we scroll down to event ID 11848, we can see a Powershell command that is initiating a `“Invoke-WebRequest”` command and downloaded `AutoIt-v3-setup.exe` from the following URI: 
 
-🔄 Initiating Process: `tor.exe`
- 📂 Path: `C:\Users\labuser007\Desktop\Tor Browser\Browser\TorBrowser\Tor\tor.exe`
+`https[:]//www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe`
 
-Additional connections were also observed on port `443`, indicating encrypted web traffic via the Tor network.
+This is clearly the script downloading and installing the required AutoIt.exe program it needs to run the malicious script! (Remember our -GetPrereqs command?)
+![image](https://github.com/user-attachments/assets/d9ef83a9-8fc9-4a10-adb2-cad637af2e4a)
 
-### 6. File Creation - TOR Shopping List
+And as a result we see that `AutoIt.exe was ran and installed`, which eventually lead to the execution of the `calc.au3` malicious script (resulting in calculator being launched in our VM)
 
-- **Timestamp:** `April 8, 2025 – 22:11:33 UTC`
-🔹 A file named `tor-shopping-list.txt` is created on the desktop.
- This may suggest potential use of Tor for planning or communication.
+![image](https://github.com/user-attachments/assets/a19ba3e3-82ab-4e42-b21c-c031403b4974)
+
+But lets verify that this `“Invoke-WebRequest”`, which resulted in the download of AutoIt.exe, actually took place by analyzing the captured network traffic in our Wireshark PCAP file.
+
+To do this, log back into your VM and open the PCAP file that was saved onto our Desktop with Wireshark:
+
+![image](https://github.com/user-attachments/assets/918db320-2820-4b05-94c4-071cac1d2337)
+
+---
+### 5.3. Wireshark and Sentinal 
+Once you open the PCAP file, you should see `all of the network traffic packets` that were captured during our attack simulation (there will be a TON):
+
+![image](https://github.com/user-attachments/assets/8284acfa-b499-4dc6-b208-2313fde7d30e)
+
+In order to verify that the `“Invoke-WebRequest”` we are going to filter down these results to the most relevant for our investigation. `Based on the MDE logs`, we know that the URI request occurred via `HTTPS` protocol at `3:51:08 PM` (`20:51:08 PM UTC`) to actually download the AutoIt-v3-setup.exe file. We also know that our VMs private IP (`10.0.0.189`) would be used as a “source IP” in the exchange…. 
+
+Based on these facts,  we will construct the following display filter to see if we can find this malicious download request:
+
+`tls && ip.src == 10.0.0.189 && frame contains "autoitscript.com"`
+
+When we run this Display Filter, we get back one packet that shows an initial connection request to the likely website at the destination IP of `212.227.91.231`:
+
+![image](https://github.com/user-attachments/assets/ae808155-9ce8-43fd-9b9b-1c0691fcdd9f)
+
+Now that we have the destination IP, lets run this additional display filter to see the full exchange between our VM IP and the autoitscript.com website:
+
+`ip.addr == 10.0.0.189 && ip.addr == 212.227.91.231 && tls`
+
+The result yields evidence that the there was indeed an exchange of an encrypted payload (“application data”) between our VM’s IP and the suspected website’s IP at `20:51 PM UTC` (`15:51 in the EST`):
+
+![image](https://github.com/user-attachments/assets/7dc408c0-7611-487f-8152-c04b854439c7)
+
+We can also lookup this networking log in Sentinel by using the following KQL Query. 
+
+**Query used to locate event:**
+
+```kql
+
+DeviceNetworkEvents
+| where Timestamp > ago(24h)
+| where DeviceName == "atomic-red-007"
+| project Timestamp, DeviceName, RemoteIP, RemotePort, Protocol, ActionType, InitiatingProcessFileName, ReportId
+| order by Timestamp desc
+```
+In this screenshot you will see that we can find a successful connection to the `same suspected IP address` at 20:51 PM UTC, further supporting that this security incident is indeed a true positive:
+
+![image](https://github.com/user-attachments/assets/e3f5a676-e4d9-4e65-abfc-35ad2de293c9)
+
+So at this point, we should have enough evidence to escalate this incident and move into the `Containment, Eradication, and Recovery` phase of NIST 800-6.
+
+BUT I am going to go a step further and review the VM’s event security logs with DeepBlueCLI to see if I missed anything else…
+
+You can also review these logs via Sentinel with KQL queries, whatever is easier for you! This is just another way to do it.
+
+---
+### 5.4. DeepBlueCLI 
+
+**What is DeepBlueCLI?**
+DeepBlueCLI is a program that was developed by the SANS institute to help conduct threat hunting activities. 
+
+In simple terms, this Powershell script allows you to pull up any security event logs that have been triggered by your Windows VM. It is a super convenient way to get a quick snapshot of any malicious activity that has slipped through the cracks
+
+In order to run this in our VM, follow these steps:
+Log into your VM and open the DeepBlueCLI-master folder that we downloaded and unzipped earlier in Step 1.
+Hold Shift + Right click inside the folder and select “Open PowerShell window here” (Make sure it is with Administrator priveledge)
+
+![image](https://github.com/user-attachments/assets/5daff4ca-a36e-4c62-a877-5bb72dbdaec2)
+
+In Powershell run this command to bypass any permission that might get in the way:
+
+`Set-ExecutionPolicy Bypass -Scope CurrentUser`
+
+Then execute this command (click “R” to run it when prompted):
+
+`./DeepBlue.ps1 -log security`
+
+Once you complete the above step, the DeepBlueCLI script will run and any security event logs that have been triggered will populate on the screen (might take a few minutes). 
+
+In our case, here are some of the logs that have been generated:
+
+![image](https://github.com/user-attachments/assets/176169ac-a73b-4ff5-b1a5-39ccbf71e4a6)
+
+Because I disabled the VM firewall and NSG setting, we actually are seeing a TON of brute force attempts to log into our VM. Other than that, there aren’t any other security events present from this avenue.
+
+Alright, lets move to the  Containment, Eradication, and Recovery phase of NIST 800-6!
+
+---
+### 6. Containment, Eradication, and Recovery 
+At this point we have conducted our investigation in accordance with the Detection and Analysis phase of NIST 800-61. In a real work environment, this would be the time to collect your evidence, write a report of your findings and inform the appropriate stake holders of the confirmed security incident.
+
+Once we have taken the above steps, we can now enter the Containment, Eradication and Recovery phase of NIST 800-61 (Click Here for more info):
+
+![image](https://github.com/user-attachments/assets/8579a189-c89c-4efb-9de1-163a3d6c5c16)
+
+According to NIST, this phase involves completing the following tasks in order to remediate this security breach:
+1. Choose a containment strategy
+2. Gather any evidence, artifacts, IOCs for potential legal proceedings.
+3. Identify the attacking host(s)
+4. Eradicate the components of the breach and Recover the impacted assets.
+
+`Choosing a containment strategy`: In our scenarios the most appropriate containment strategy is to `“isolate”` our VM from within Micrsoft Defender for Enpoint to prevent any further communication with external malicious servers.
+
+`Gather evidence`: Here, we would gather all IP addresses, PCAP files, logs, hash values of suspected files (calc.au3.exe, etc.) and any indicators of compromise that will help build a legal case if needed.
+
+`Identify the attacking host(s)`: Since this was a simulated attack, this won’t apply.
+
+`Eradicate the components of the breach and Recover the impacted assets`: In our case, this would involve running an antivirus scan, reinstating our firewall and NSG settings, and deleting any malicious files from the VM. Since our VM instance was freshly created for this exercise, there will not be a “backup” to recover.
+
+
+At this point, we have concluded the Containment, Eradication and Recovery phase and we are now in the final Post-Incident Activity phase. In this phase we `review all of the lessons learned` from our lab and use that to build better detection rules in future Atomic Red Attack simulations:
+
+![image](https://github.com/user-attachments/assets/acea6b7e-5fa5-4dff-9261-eae11eccd844)
+
 
 ---
 
-## Summary
-
-- User `labuser007` downloaded and executed the Tor browser.
-- Successful installation and execution occurred, confirmed by file activity and process creation logs.
-- Network logs confirm actual Tor network usage with outbound connections.
-- The presence of `tor-shopping-list.txt` suggests user intent to document or plan activity.
-
----
-
-## Response Taken
-
-TOR usage was confirmed on the endpoint `DavarThreatHunt` by the user `labuser007`. The device was isolated and the user's direct manager was notified.
-
----
