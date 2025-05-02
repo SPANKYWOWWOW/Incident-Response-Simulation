@@ -366,7 +366,7 @@ Alright, lets move to the  Containment, Eradication, and Recovery phase of NIST 
 ### 6. Containment, Eradication, and Recovery 
 At this point we have conducted our investigation in accordance with the Detection and Analysis phase of NIST 800-61. In a real work environment, this would be the time to collect your evidence, write a report of your findings and inform the appropriate stake holders of the confirmed security incident.
 
-Once we have taken the above steps, we can now enter the Containment, Eradication and Recovery phase of NIST 800-61 (Click Here for more info):
+Once we have taken the above steps, we can now enter the Containment, Eradication and Recovery phase of NIST 800-61 (([Click Here](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-61r2.pdf)) for more info):
 
 ![image](https://github.com/user-attachments/assets/8579a189-c89c-4efb-9de1-163a3d6c5c16)
 
