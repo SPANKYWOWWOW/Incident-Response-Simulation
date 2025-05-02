@@ -1,3 +1,5 @@
+![image](https://github.com/user-attachments/assets/772041dc-9d49-4d71-89a9-1bca101df580)
+
 # Incident Response Simulation (T1059 - Command and Scripting Interpreter & T1086 - PowerShell)
 
 ## Tools and Frameworks used in this lab
